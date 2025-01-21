@@ -32,12 +32,14 @@ import Distribution.Version (intersectVersionRanges, simplifyVersionRange)
 import System.FilePath (isPathSeparator)
 
 -- | Scan Cabal index @01-index.tar@ and return Cabal files
--- of latest releases (not necessarily largest versions), which
+-- of latest releases / revisions (not necessarily largest versions), which
 -- contain one of the needles as an entire word (separated by spaces
 -- or punctuation).
 --
 -- To avoid ambiguity: we first select the latest releases,
 -- then filter them by needles.
+--
+-- @since 0.1
 latestReleases
   :: [ByteString]
   -- ^ Needles to search in Cabal files.
@@ -51,16 +53,17 @@ latestReleases
   -- ^ Map from latest releases to their Cabal files.
 latestReleases needles idx indexState =
   M.filter (containsAnyAsWholeWord machine . decodeUtf8Lenient)
-    <$> getLatestReleases idx indexState
+    <$> allLatestReleases idx indexState
   where
     machine = Aho.build (map ((\x -> (x, x)) . decodeUtf8Lenient) needles)
 
--- | Strip revisions and releases except the latest one.
-getLatestReleases
+-- | Scan Cabal index @01-index.tar@ and return Cabal files
+-- of latest releases / revisions (not necessarily largest versions).
+allLatestReleases
   :: FilePath
   -> Maybe UTCTime
   -> IO (Map PackageName ByteString)
-getLatestReleases idx indexState = foldCabalFilesInIndex idx indexState mempty M.insert
+allLatestReleases idx indexState = foldCabalFilesInIndex idx indexState mempty M.insert
 
 containsAnyAsWholeWord :: Aho.AcMachine Text -> Text -> Bool
 containsAnyAsWholeWord machine hay = Aho.runText False go machine hay
@@ -123,6 +126,8 @@ tarTakeWhile p =
 
 -- | Scan Cabal file looking for package names,
 -- coalescing version bounds from all components and under all conditions.
+--
+-- @since 0.1
 extractDependencies
   :: [PackageName]
   -- ^ Needles to search.

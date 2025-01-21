@@ -2,4 +2,4 @@
 
 Command-line tool to list Hackage reverse dependencies.
 
-It is different from how Hackage itself tracks them: this tool accounts for all package components, including tests and benchmarks, and counts dependencies only across the latest releases. The approach is roughly equivalent to what [packdeps.haskellers.com](https://packdeps.haskellers.com) used to do.
+It is different from how Hackage itself tracks them: this tool accounts for all package components, including tests and benchmarks, and counts dependencies only across the latest releases. The approach is roughly equivalent to what [packdeps.haskellers.com](https://packdeps.haskellers.com) does.

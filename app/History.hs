@@ -5,7 +5,6 @@ module Main (
   main,
 ) where
 
-import Cabal.Config (cfgRepoIndex, hackageHaskellOrg, readConfig)
 import Data.ByteString.Char8 qualified as B
 import Data.Foldable (for_)
 import Data.List qualified as L
@@ -13,12 +12,15 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as M
 import Data.Time (Day, UTCTime (..), addDays, getCurrentTime)
+import Distribution.Client.Config (loadConfig, savedGlobalFlags)
+import Distribution.Client.GlobalFlags (globalCacheDir)
+import Distribution.Simple.Flag (fromFlag)
 import Distribution.Types.PackageName (PackageName, unPackageName)
 import Hackage.RevDeps (extractDependencies, latestReleases)
 import Options.Applicative (Parser, auto, execParser, fullDesc, help, helper, info, long, metavar, option, progDesc, showDefault, strArgument, value)
 import Options.Applicative.NonEmpty (some1)
 import System.Console.ANSI (hSupportsANSI, hyperlinkCode)
-import System.Exit (die)
+import System.FilePath ((</>))
 import System.IO (stdout)
 
 data Config = Config
@@ -66,18 +68,17 @@ main = do
       dates = L.nub $ [cnfStart, addDays (fromIntegral cnfStep) cnfStart .. cnfFinish] ++ [cnfFinish]
   supportsAnsi <- hSupportsANSI stdout
 
-  cnf <- readConfig
-  case cfgRepoIndex cnf hackageHaskellOrg of
-    Nothing -> die $ hackageHaskellOrg ++ " not found in cabal.config, aborting"
-    Just idx -> do
-      putStrLn $ unwords $ "Date      " : map (showPackage supportsAnsi) args
-      let needles = map (B.pack . unPackageName) args
-      for_ dates $ \date -> do
-        releases <- latestReleases needles idx (Just $ UTCTime date 0)
-        let pkgs = fmap (extractDependencies args) releases
-            pkgs' = M.mapWithKey (\k v -> M.delete k v) pkgs
-            counters = M.unionsWith (+) $ fmap (fmap (const (1 :: Int))) pkgs'
-        putStrLn $ unwords $ show date : map (\pkg -> showPair (pkg, M.findWithDefault 0 pkg counters)) args
+  cnf <- loadConfig minBound mempty
+  let cacheDir = fromFlag $ globalCacheDir $ savedGlobalFlags cnf
+      idx = cacheDir </> hackageHaskellOrg </> "01-index.tar"
+  putStrLn $ unwords $ "Date      " : map (showPackage supportsAnsi) args
+  let needles = map (B.pack . unPackageName) args
+  for_ dates $ \date -> do
+    releases <- latestReleases needles idx (Just $ UTCTime date 0)
+    let pkgs = fmap (extractDependencies args) releases
+        pkgs' = M.mapWithKey M.delete pkgs
+        counters = M.unionsWith (+) $ fmap (fmap (const (1 :: Int))) pkgs'
+    putStrLn $ unwords $ show date : map (\pkg -> showPair (pkg, M.findWithDefault 0 pkg counters)) args
 
 showPair :: Show v => (PackageName, v) -> String
 showPair (k, v) =
@@ -91,3 +92,6 @@ showPackage supportsAnsi p =
     else xs
   where
     xs = unPackageName p
+
+hackageHaskellOrg :: FilePath
+hackageHaskellOrg = "hackage.haskell.org"

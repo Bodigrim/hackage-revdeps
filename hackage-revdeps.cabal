@@ -1,12 +1,12 @@
 cabal-version:   2.2
 name:            hackage-revdeps
-version:         0.1
+version:         0.1.1
 license:         BSD-3-Clause
 license-file:    LICENSE
 maintainer:      andrew.lelechenko@gmail.com
 author:          Bodigrim
 tested-with:
-    ghc ==9.12.1 ghc ==9.10.1 ghc ==9.8.4 ghc ==9.6.6 ghc ==9.4.8
+    ghc ==9.12.2 ghc ==9.10.1 ghc ==9.8.4 ghc ==9.6.7 ghc ==9.4.8
     ghc ==9.2.8
 
 synopsis:        List Hackage reverse dependencies
@@ -16,7 +16,7 @@ description:
     this tool accounts for all package components, including
     tests and benchmarks, and counts dependencies only
     across the latest releases. The approach is roughly
-    equivalent to what <https://packdeps.haskellers.com> used to do.
+    equivalent to what <https://packdeps.haskellers.com> does.
 
 category:        Development
 build-type:      Simple
@@ -40,7 +40,7 @@ library
         alfred-margaret >=2.0 && <2.2,
         base >=4.16 && <5,
         bytestring <0.13,
-        containers <0.8,
+        containers <0.9,
         filepath <1.6,
         tar <0.7,
         text >=2.0 && <2.2,
@@ -61,17 +61,14 @@ executable hackage-revdeps
         base,
         ansi-terminal >=0.11.3 && <1.2,
         bytestring,
-        cabal-install-parsers <0.7,
+        cabal-install >=3.8 && <3.15,
         containers,
+        filepath,
         hackage-revdeps,
         optparse-applicative >=0.16 && <0.19,
-        time <1.15
-
-    if flag(cabal-syntax)
-        build-depends: Cabal-syntax >=3.8 && <3.15
-
-    else
-        build-depends: Cabal <3.7
+        time <1.15,
+        Cabal-syntax >=3.8 && <3.15,
+        Cabal >=3.8 && <3.15
 
 executable hackage-revdeps-history
     main-is:          History.hs
@@ -82,14 +79,11 @@ executable hackage-revdeps-history
         base,
         ansi-terminal >=0.11.3 && <1.2,
         bytestring,
-        cabal-install-parsers <0.7,
+        cabal-install >=3.8 && <3.15,
         containers,
+        filepath,
         hackage-revdeps,
         optparse-applicative >=0.16 && <0.19,
-        time <1.15
-
-    if flag(cabal-syntax)
-        build-depends: Cabal-syntax >=3.8 && <3.15
-
-    else
-        build-depends: Cabal <3.7
+        time <1.15,
+        Cabal-syntax >=3.8 && <3.15,
+        Cabal >=3.8 && <3.15
