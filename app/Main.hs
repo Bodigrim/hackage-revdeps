@@ -34,7 +34,7 @@ parseArgs :: Parser Config
 parseArgs = do
   cnfIndexState <-
     optional $
-      option (fmap (\d -> UTCTime d 0) (auto :: ReadM Day)) $
+      option (fmap (`UTCTime` 0) (auto :: ReadM Day)) $
         long "index-state"
           <> help "Timestamp of index state at which to stop scanning, YYYY-MM-DD"
   cnfPackageNames <-
@@ -59,7 +59,7 @@ main = do
       let needles = map (B.pack . unPackageName) args
       releases <- latestReleases needles idx cnfIndexState
       let pkgs = fmap (extractDependencies args) releases
-          pkgs' = M.mapWithKey (\k v -> M.delete k v) pkgs
+          pkgs' = M.mapWithKey M.delete pkgs
       report $ M.filter (not . null) pkgs'
 
 report :: Map PackageName (Map PackageName VersionRange) -> IO ()

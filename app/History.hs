@@ -75,7 +75,7 @@ main = do
       for_ dates $ \date -> do
         releases <- latestReleases needles idx (Just $ UTCTime date 0)
         let pkgs = fmap (extractDependencies args) releases
-            pkgs' = M.mapWithKey (\k v -> M.delete k v) pkgs
+            pkgs' = M.mapWithKey M.delete pkgs
             counters = M.unionsWith (+) $ fmap (fmap (const (1 :: Int))) pkgs'
         putStrLn $ unwords $ show date : map (\pkg -> showPair (pkg, M.findWithDefault 0 pkg counters)) args
 

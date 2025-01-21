@@ -32,7 +32,7 @@ import Distribution.Version (intersectVersionRanges, simplifyVersionRange)
 import System.FilePath (isPathSeparator)
 
 -- | Scan Cabal index @01-index.tar@ and return Cabal files
--- of latest releases (not necessarily largest versions), which
+-- of latest releases / revisions (not necessarily largest versions), which
 -- contain one of the needles as an entire word (separated by spaces
 -- or punctuation).
 --
