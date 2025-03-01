@@ -40,7 +40,7 @@ library
         alfred-margaret >=2.0 && <2.2,
         base >=4.16 && <5,
         bytestring <0.13,
-        containers <0.8,
+        containers <0.9,
         filepath <1.6,
         tar <0.7,
         text >=2.0 && <2.2,
