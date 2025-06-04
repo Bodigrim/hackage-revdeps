@@ -8,9 +8,9 @@
 #
 # For more information, see https://github.com/haskell-CI/haskell-ci
 #
-# version: 0.19.20250411
+# version: 0.19.20250801
 #
-# REGENDATA ("0.19.20250411",["github","hackage-revdeps.cabal","--installed","-parsec","--installed","-text","--installed","-time","--installed","-Cabal-syntax","--installed","-directory","--installed","-Cabal","--installed","-unix","--installed","-file-io","--installed","-semaphore-compat","--installed","-process"])
+# REGENDATA ("0.19.20250801",["github","hackage-revdeps.cabal","--installed","-parsec","--installed","-text","--installed","-time","--installed","-Cabal-syntax","--installed","-directory","--installed","-Cabal","--installed","-unix","--installed","-file-io","--installed","-semaphore-compat","--installed","-process"])
 #
 name: Haskell-CI
 on:
@@ -33,9 +33,9 @@ jobs:
             compilerVersion: 9.12.2
             setup-method: ghcup
             allow-failure: false
-          - compiler: ghc-9.10.1
+          - compiler: ghc-9.10.2
             compilerKind: ghc
-            compilerVersion: 9.10.1
+            compilerVersion: 9.10.2
             setup-method: ghcup
             allow-failure: false
           - compiler: ghc-9.8.4
@@ -53,11 +53,6 @@ jobs:
             compilerVersion: 9.4.8
             setup-method: ghcup
             allow-failure: false
-          - compiler: ghc-9.2.8
-            compilerKind: ghc
-            compilerVersion: 9.2.8
-            setup-method: ghcup
-            allow-failure: false
       fail-fast: false
     steps:
       - name: apt-get install
@@ -71,8 +66,8 @@ jobs:
           chmod a+x "$HOME/.ghcup/bin/ghcup"
       - name: Install cabal-install
         run: |
-          "$HOME/.ghcup/bin/ghcup" install cabal 3.14.2.0 || (cat "$HOME"/.ghcup/logs/*.* && false)
-          echo "CABAL=$HOME/.ghcup/bin/cabal-3.14.2.0 -vnormal+nowrap" >> "$GITHUB_ENV"
+          "$HOME/.ghcup/bin/ghcup" install cabal 3.16.0.0 || (cat "$HOME"/.ghcup/logs/*.* && false)
+          echo "CABAL=$HOME/.ghcup/bin/cabal-3.16.0.0 -vnormal+nowrap" >> "$GITHUB_ENV"
       - name: Install GHC (GHCup)
         if: matrix.setup-method == 'ghcup'
         run: |
@@ -173,7 +168,11 @@ jobs:
           touch cabal.project.local
           echo "packages: ${PKGDIR_hackage_revdeps}" >> cabal.project
           echo "package hackage-revdeps" >> cabal.project
-          echo "    ghc-options: -Werror=missing-methods" >> cabal.project
+          echo "    ghc-options: -Werror=missing-methods -Werror=missing-fields" >> cabal.project
+          echo "package hackage-revdeps" >> cabal.project
+          echo "    ghc-options: -Werror=unused-packages" >> cabal.project
+          echo "package hackage-revdeps" >> cabal.project
+          echo "    ghc-options: -Werror=incomplete-patterns -Werror=incomplete-uni-patterns" >> cabal.project
           cat >> cabal.project <<EOF
           EOF
           $HCPKG list --simple-output --names-only | perl -ne 'for (split /\s+/) { print "constraints: any.$_ installed\n" unless /^(Cabal|Cabal-syntax|directory|file-io|hackage-revdeps|parsec|process|semaphore-compat|text|time|unix)$/; }' >> cabal.project.local

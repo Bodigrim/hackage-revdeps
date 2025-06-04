@@ -5,19 +5,19 @@ module Main (
   main,
 ) where
 
-import Data.ByteString.Char8 qualified as B
 import Data.Foldable (for_)
 import Data.List qualified as L
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as M
+import Data.Set qualified as S
 import Data.Time (Day, UTCTime (..), addDays, getCurrentTime)
 import Distribution.Client.Config (loadConfig, savedGlobalFlags)
 import Distribution.Client.GlobalFlags (globalCacheDir)
 import Distribution.Simple.Flag (fromFlag)
-import Distribution.Types.PackageName (PackageName, unPackageName)
-import Hackage.RevDeps (extractDependencies, latestReleases)
-import Options.Applicative (Parser, auto, execParser, fullDesc, help, helper, info, long, metavar, option, progDesc, showDefault, strArgument, value)
+import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
+import Hackage.RevDeps (getReverseDependencies, getTransitiveReverseDependencies)
+import Options.Applicative (Parser, auto, execParser, fullDesc, help, helper, info, long, metavar, option, progDesc, showDefault, strArgument, switch, value)
 import Options.Applicative.NonEmpty (some1)
 import System.Console.ANSI (hSupportsANSI, hyperlinkCode)
 import System.FilePath ((</>))
@@ -28,6 +28,7 @@ data Config = Config
   , cnfFinish :: !Day
   , cnfStep :: !Word
   , cnfPackageNames :: !(NonEmpty PackageName)
+  , cnfTransitive :: !Bool
   }
 
 parseArgs :: Day -> Parser Config
@@ -55,6 +56,10 @@ parseArgs today = do
       strArgument $
         metavar "PKGS"
           <> help "Package names to scan Hackage for their reverse dependencies"
+  cnfTransitive <-
+    switch $
+      long "transitive"
+        <> help "Count transitive (both direct and indirect) dependencies"
   pure Config {..}
 
 main :: IO ()
@@ -72,11 +77,11 @@ main = do
   let cacheDir = fromFlag $ globalCacheDir $ savedGlobalFlags cnf
       idx = cacheDir </> hackageHaskellOrg </> "01-index.tar"
   putStrLn $ unwords $ "Date      " : map (showPackage supportsAnsi) args
-  let needles = map (B.pack . unPackageName) args
   for_ dates $ \date -> do
-    releases <- latestReleases needles idx (Just $ UTCTime date 0)
-    let pkgs = fmap (extractDependencies args) releases
-        pkgs' = M.mapWithKey M.delete pkgs
+    let utcTime = Just $ UTCTime date 0
+        func = if cnfTransitive then getTransitiveReverseDependencies else getReverseDependencies
+    pkgs <- func (S.fromList args) idx utcTime
+    let pkgs' = M.delete (mkPackageName "acme-everything") pkgs
         counters = M.unionsWith (+) $ fmap (fmap (const (1 :: Int))) pkgs'
     putStrLn $ unwords $ show date : map (\pkg -> showPair (pkg, M.findWithDefault 0 pkg counters)) args
 
