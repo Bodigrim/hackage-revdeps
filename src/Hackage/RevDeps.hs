@@ -9,7 +9,7 @@ import Codec.Archive.Tar.Entry qualified as Tar
 import Control.Exception (throwIO)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as BL
-import Data.Char (isPunctuation, isSpace)
+import Data.Char (isPunctuation, isSpace, ord)
 import Data.List (isSuffixOf)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as M
@@ -28,15 +28,15 @@ import Distribution.Types.BuildInfo.Lens qualified as Lens
 import Distribution.Types.Dependency (Dependency (..))
 import Distribution.Types.PackageName (PackageName, mkPackageName)
 import Distribution.Types.VersionRange (VersionRange)
-import Distribution.Version (intersectVersionRanges, simplifyVersionRange)
+import Distribution.Version (Version, intersectVersionRanges, mkVersion, simplifyVersionRange)
 import System.FilePath (isPathSeparator)
 
 -- | Scan Cabal index @01-index.tar@ and return Cabal files
--- of latest releases / revisions (not necessarily largest versions), which
+-- of last versions (not necessarily latest releases or revisions), which
 -- contain one of the needles as an entire word (separated by spaces
 -- or punctuation).
 --
--- To avoid ambiguity: we first select the latest releases,
+-- To avoid ambiguity: we first select the last versions,
 -- then filter them by needles.
 --
 -- @since 0.1
@@ -50,7 +50,7 @@ latestReleases
   -> Maybe UTCTime
   -- ^ Timestamp of index state at which to stop scanning.
   -> IO (Map PackageName ByteString)
-  -- ^ Map from latest releases to their Cabal files.
+  -- ^ Map from packages with largest versions to their Cabal files.
 latestReleases needles idx indexState =
   M.filter (containsAnyAsWholeWord machine . decodeUtf8Lenient)
     <$> allLatestReleases idx indexState
@@ -63,12 +63,19 @@ allLatestReleases
   :: FilePath
   -> Maybe UTCTime
   -> IO (Map PackageName ByteString)
-allLatestReleases idx indexState = foldCabalFilesInIndex idx indexState mempty M.insert
+allLatestReleases idx indexState =
+  fmap (fmap snd) $
+    foldCabalFilesInIndex idx indexState mempty go
+  where
+    go pkg ver cnt = M.alter (Just . f) pkg
+      where
+        new = (ver, cnt)
+        f = maybe new (\old@(ver', _) -> if ver' <= ver then new else old)
 
 containsAnyAsWholeWord :: Aho.AcMachine Text -> Text -> Bool
 containsAnyAsWholeWord machine hay = Aho.runText False go machine hay
   where
-    isWordBoundary c = isSpace c || isPunctuation c
+    isWordBoundary c = (isSpace c || isPunctuation c || c `elem` "^>=<") && c /= '-'
 
     go :: Bool -> Aho.Match Text -> Aho.Next Bool
     go _ (Aho.Match pos val) =
@@ -88,7 +95,7 @@ foldCabalFilesInIndex
   :: FilePath
   -> Maybe UTCTime
   -> a
-  -> (PackageName -> ByteString -> a -> a)
+  -> (PackageName -> Version -> ByteString -> a -> a)
   -> IO a
 foldCabalFilesInIndex fp indexState ini action = do
   contents <- BL.readFile fp
@@ -106,13 +113,25 @@ foldCabalFilesInIndex fp indexState ini action = do
     go acc entry =
       case Tar.entryContent entry of
         Tar.NormalFile contents _ ->
-          if isCabalFile then action pkgName bs acc else acc
+          if isCabalFile then action pkgName version bs acc else acc
           where
             bs = BL.toStrict contents
             fpath = Tar.entryPath entry
             isCabalFile = ".cabal" `isSuffixOf` fpath
-            pkgName = mkPackageName $ takeWhile (not . isPathSeparator) fpath
+            (rawPkgName, fpath') = break isPathSeparator fpath
+            pkgName = mkPackageName rawPkgName
+            rawVersion = takeWhile (not . isPathSeparator) $ dropWhile isPathSeparator fpath'
+            version = mkVersion $ readVersion rawVersion
         _ -> acc
+
+readVersion :: String -> [Int]
+readVersion = (\(acc, _mult, rest) -> acc : rest) . foldr go (0, 1, [])
+  where
+    go c (acc, mult, rest)
+      | fromIntegral d < (10 :: Word) = (acc + d * mult, mult * 10, rest)
+      | otherwise = (0, 1, acc : rest)
+      where
+        d = ord c - ord '0'
 
 tarTakeWhile
   :: (Tar.Entry -> Bool)
