@@ -8,9 +8,9 @@
 #
 # For more information, see https://github.com/haskell-CI/haskell-ci
 #
-# version: 0.19.20250411
+# version: 0.19.20250605
 #
-# REGENDATA ("0.19.20250411",["github","hackage-revdeps.cabal","--installed","-parsec","--installed","-text","--installed","-time","--installed","-Cabal-syntax","--installed","-directory","--installed","-Cabal","--installed","-unix","--installed","-file-io","--installed","-semaphore-compat","--installed","-process"])
+# REGENDATA ("0.19.20250605",["github","hackage-revdeps.cabal","--installed","-parsec","--installed","-text","--installed","-time","--installed","-Cabal-syntax","--installed","-directory","--installed","-Cabal","--installed","-unix","--installed","-file-io","--installed","-semaphore-compat","--installed","-process"])
 #
 name: Haskell-CI
 on:
@@ -51,11 +51,6 @@ jobs:
           - compiler: ghc-9.4.8
             compilerKind: ghc
             compilerVersion: 9.4.8
-            setup-method: ghcup
-            allow-failure: false
-          - compiler: ghc-9.2.8
-            compilerKind: ghc
-            compilerVersion: 9.2.8
             setup-method: ghcup
             allow-failure: false
       fail-fast: false
