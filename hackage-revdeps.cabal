@@ -40,7 +40,7 @@ library
         filepath <1.6,
         tar <0.7,
         text >=2.0 && <2.2,
-        time <1.15,
+        time <1.16,
         Cabal-syntax >=3.8 && <3.17
 
 executable hackage-revdeps
@@ -57,7 +57,7 @@ executable hackage-revdeps
         filepath,
         hackage-revdeps,
         optparse-applicative >=0.16 && <0.20,
-        time <1.15,
+        time <1.16,
         Cabal-syntax >=3.8 && <3.17,
         Cabal >=3.8 && <3.17
 
@@ -75,6 +75,6 @@ executable hackage-revdeps-history
         filepath,
         hackage-revdeps,
         optparse-applicative >=0.16 && <0.20,
-        time <1.15,
+        time <1.16,
         Cabal-syntax >=3.8 && <3.17,
         Cabal >=3.8 && <3.17
