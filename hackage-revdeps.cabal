@@ -67,6 +67,7 @@ executable hackage-revdeps-history
     default-language: GHC2021
     ghc-options:      -Wall -Wunused-packages
     build-depends:
+        granite >=0.1.0.2 && <0.2,
         base,
         ansi-terminal >=0.11.3 && <1.2,
         bytestring,

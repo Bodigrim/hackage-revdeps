@@ -22,6 +22,8 @@ import Options.Applicative.NonEmpty (some1)
 import System.Console.ANSI (hSupportsANSI, hyperlinkCode)
 import System.FilePath ((</>))
 import System.IO (stdout)
+import Granite (lineGraph, defPlot)
+import Data.Bifunctor (second)
 
 data Config = Config
   { cnfStart :: !Day
@@ -73,12 +75,18 @@ main = do
       idx = cacheDir </> hackageHaskellOrg </> "01-index.tar"
   putStrLn $ unwords $ "Date      " : map (showPackage supportsAnsi) args
   let needles = map (B.pack . unPackageName) args
-  for_ dates $ \date -> do
+  results <- flip traverse dates $ \date -> do
     releases <- latestReleases needles idx (Just $ UTCTime date 0)
     let pkgs = fmap (extractDependencies args) releases
         pkgs' = M.mapWithKey M.delete pkgs
-        counters = M.unionsWith (+) $ fmap (fmap (const (1 :: Int))) pkgs'
-    putStrLn $ unwords $ show date : map (\pkg -> showPair (pkg, M.findWithDefault 0 pkg counters)) args
+        allCounters :: M.Map PackageName Int
+        allCounters = M.unionsWith (+) $ fmap (fmap (const (1 :: Int))) pkgs'
+        counters = map (\pkg -> M.findWithDefault 0 pkg allCounters) args
+    putStrLn $ unwords $ show date : zipWith (curry showPair) args counters
+    pure (date, counters)
+  let graphLines = zip (map unPackageName args) (uncurry (\ds -> map (zip (map (fromIntegral . fromEnum) ds) . map fromIntegral)) $ second L.transpose $ unzip results)
+      graph = lineGraph "" graphLines defPlot
+  putStrLn graph
 
 showPair :: Show v => (PackageName, v) -> String
 showPair (k, v) =
