@@ -67,6 +67,7 @@ executable hackage-revdeps-history
     default-language: GHC2021
     ghc-options:      -Wall -Wunused-packages -rtsopts
     build-depends:
+        granite >=0.3 && <0.4,
         base,
         ansi-terminal >=0.11.3 && <1.2,
         cabal-install >=3.8 && <3.17,
@@ -74,6 +75,8 @@ executable hackage-revdeps-history
         filepath,
         hackage-revdeps,
         optparse-applicative >=0.16 && <0.20,
+        terminal-size >=0.2 && <0.4,
+        text <2.2,
         time <1.16,
         Cabal-syntax >=3.8 && <3.17,
         Cabal >=3.8 && <3.17

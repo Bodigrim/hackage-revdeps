@@ -5,12 +5,14 @@ module Main (
   main,
 ) where
 
-import Data.Foldable (for_)
 import Data.List qualified as L
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.IO qualified as T
 import Data.Time (Day, UTCTime (..), addDays, getCurrentTime)
 import Distribution.Client.Config (loadConfig, savedGlobalFlags)
 import Distribution.Client.GlobalFlags (globalCacheDir)
@@ -22,6 +24,9 @@ import Options.Applicative.NonEmpty (some1)
 import System.Console.ANSI (hSupportsANSI, hyperlinkCode)
 import System.FilePath ((</>))
 import System.IO (stdout)
+import Granite (lineGraph, defPlot, widthChars, yBounds, xFormatter, yFormatter)
+import Data.Bifunctor (second)
+import System.Console.Terminal.Size qualified as TermSize
 
 data Config = Config
   { cnfStart :: !Day
@@ -77,13 +82,35 @@ main = do
   let cacheDir = fromFlag $ globalCacheDir $ savedGlobalFlags cnf
       idx = cacheDir </> hackageHaskellOrg </> "01-index.tar"
   putStrLn $ unwords $ "Date      " : map (showPackage supportsAnsi) args
-  for_ dates $ \date -> do
+  results <- flip traverse dates $ \date -> do
     let utcTime = Just $ UTCTime date 0
         func = if cnfTransitive then getTransitiveReverseDependencies else getReverseDependencies
     pkgs <- func (S.fromList args) idx utcTime
     let pkgs' = M.delete (mkPackageName "acme-everything") pkgs
-        counters = M.unionsWith (+) $ fmap (fmap (const (1 :: Int))) pkgs'
-    putStrLn $ unwords $ show date : map (\pkg -> showPair (pkg, M.findWithDefault 0 pkg counters)) args
+        allCounters :: M.Map PackageName Int
+        allCounters = M.unionsWith (+) $ fmap (fmap (const (1 :: Int))) pkgs'
+        counters = map (\pkg -> M.findWithDefault 0 pkg allCounters) args
+    putStrLn $ unwords $ show date : zipWith (curry showPair) args counters
+    pure (date, counters)
+  mTermWidth <- fmap (fmap TermSize.width) TermSize.size
+  let plot = case mTermWidth of
+        Nothing -> defPlot
+        Just w -> defPlot { widthChars = max (widthChars defPlot) (w - 16) }
+      yMax = fromIntegral $ maximum $ 0 : concatMap snd results
+      plot' = plot { yBounds = (Just 0, Just yMax), xFormatter = const formatAsDate, yFormatter = const formatAsInt }
+  let graphLines = zip (map (T.pack . unPackageName) args) (uncurry (\ds -> map (zip (map (fromIntegral . fromEnum) ds) . map fromIntegral)) $ second L.transpose $ unzip results)
+      graph = lineGraph graphLines plot'
+  putStrLn ""
+  T.putStrLn graph
+
+formatAsDate :: Int -> Double -> Text
+formatAsDate n x = T.take (n - 1) $ T.pack $ show d
+  where
+    d :: Day
+    d = toEnum (truncate x)
+
+formatAsInt :: Int -> Double -> Text
+formatAsInt _ = T.pack . show . truncate @Double @Int
 
 showPair :: Show v => (PackageName, v) -> String
 showPair (k, v) =
