@@ -59,7 +59,7 @@ parseArgs today = do
   cnfTransitive <-
     switch $
       long "transitive"
-        <> help "Count transitive (both direct and indirect) dependencies"
+        <> help "Count transitive (both direct and indirect) dependencies. This mode is imprecise when passing multiple package names at once."
   pure Config {..}
 
 main :: IO ()
