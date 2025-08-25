@@ -1,14 +1,16 @@
 -- | Functions to list Hackage reverse dependencies.
 module Hackage.RevDeps (
-  lastVersions,
-  allLastVersions,
+  lastVersionsOfPackagesWithNeedles,
+  lastVersionsOfPackages,
   extractDependencies,
+  extractAllDependencies,
   getReverseDependencies,
   getTransitiveReverseDependencies,
 ) where
 
 import Codec.Archive.Tar qualified as Tar
 import Codec.Archive.Tar.Entry qualified as Tar
+import Codec.Compression.GZip qualified as Gzip
 import Control.Exception (throwIO)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as B
@@ -38,7 +40,7 @@ import Distribution.Types.VersionRange (VersionRange)
 import Distribution.Version (Version, intersectVersionRanges, mkVersion, simplifyVersionRange)
 import System.FilePath (isPathSeparator)
 
--- | Scan Cabal index @01-index.tar@ and return Cabal files
+-- | Scan Cabal index and return Cabal files
 -- of last versions (not necessarily latest releases or revisions), which
 -- contain one of the needles as an entire word (separated by spaces
 -- or punctuation).
@@ -46,20 +48,25 @@ import System.FilePath (isPathSeparator)
 -- To avoid ambiguity: we first select the last versions,
 -- then filter them by needles.
 --
--- @since 0.2
-lastVersions
-  :: Set ByteString
+-- @since 0.3
+lastVersionsOfPackagesWithNeedles
+  :: (PackageName -> Bool)
+  -- ^ Which packages are we looking for? Could be 'const' 'True'.
+  -> Set ByteString
   -- ^ Needles to search in Cabal files.
   -> FilePath
-  -- ^ Path to @01-index.tar@.
-  -- One can use @Cabal.Config.cfgRepoIndex@ from @cabal-install-parsers@
-  -- to obtain it.
+  -- ^ Path to @01-index.tar@ or @01-index.tar.gz@.
   -> Maybe UTCTime
   -- ^ Timestamp of index state at which to stop scanning.
   -> IO (Map PackageName ByteString)
   -- ^ Map from packages with largest versions to their Cabal files.
-lastVersions needles idx indexState =
-  filterByNeedles needles <$> allLastVersions idx indexState
+lastVersionsOfPackagesWithNeedles pkgPred needles idx indexState =
+  -- There is a memory vs. speed trade off: instead of collecting all last
+  -- versions into a massive map (~300 M) and then filtering them,
+  -- we could have filtered them as we go. The downside would be
+  -- filtering each and every Cabal file, even for old versions
+  -- which are soon to be rewritten by newer releases.
+  filterByNeedles needles <$> lastVersionsOfPackages pkgPred idx indexState
 
 filterByNeedles
   :: Set ByteString
@@ -72,16 +79,21 @@ filterByNeedles needles = M.filter (containsAnyAsWholeWord machine . decodeUtf8L
 -- | Scan Cabal index @01-index.tar@ and return Cabal files
 -- of last versions (not necessarily latest releases or revisions).
 --
--- @since 0.2
-allLastVersions
-  :: FilePath
+-- @since 0.3
+lastVersionsOfPackages
+  :: (PackageName -> Bool)
+  -- ^ Which packages are we looking for? Could be 'const' 'True'.
+  -> FilePath
+  -- ^ Path to @01-index.tar@ or @01-index.tar.gz@.
   -> Maybe UTCTime
+  -- ^ Timestamp of index state at which to stop scanning.
   -> IO (Map PackageName ByteString)
-allLastVersions idx indexState =
+  -- ^ Map from packages with largest versions to their Cabal files.
+lastVersionsOfPackages pkgPred idx indexState =
   fmap (fmap snd) $
     foldCabalFilesInIndex idx indexState mempty go
   where
-    go pkg ver cnt = M.alter (Just . f) pkg
+    go pkg ver cnt = if pkgPred pkg then M.alter (Just . f) pkg else id
       where
         new = (ver, cnt)
         f = maybe new (\old@(ver', _) -> if ver' <= ver then new else old)
@@ -112,7 +124,10 @@ foldCabalFilesInIndex
   -> (PackageName -> Version -> ByteString -> a -> a)
   -> IO a
 foldCabalFilesInIndex fp indexState ini action = do
-  contents <- BL.readFile fp
+  contents' <- BL.readFile fp
+  -- 1F 8B is GZip magic header, see https://en.wikipedia.org/wiki/Gzip#File_structure
+  let isGzip = BL.pack [0x1f, 0x8b] `BL.isPrefixOf` contents'
+      contents = if isGzip then Gzip.decompress contents' else contents'
   let entries' = Tar.read contents
       entries = case indexState of
         Nothing -> entries'
@@ -129,7 +144,9 @@ foldCabalFilesInIndex fp indexState ini action = do
         Tar.NormalFile contents _ ->
           if isCabalFile then action pkgName version bs acc else acc
           where
-            bs = BL.toStrict contents
+            -- If we do not force 'bs' at this point, we'll end up
+            -- retaining entire 'contents' in memory, which is ~1G.
+            !bs = BL.toStrict contents
             fpath = Tar.entryPath entry
             isCabalFile = ".cabal" `isSuffixOf` fpath
             (rawPkgName, fpath') = break isPathSeparator fpath
@@ -157,7 +174,7 @@ tarTakeWhile p =
     Tar.Done
     Tar.Fail
 
--- | Scan Cabal file looking for package names,
+-- | Scan Cabal file looking for package names matching needles,
 -- coalescing version bounds from all components and under all conditions.
 --
 -- @since 0.1
@@ -168,31 +185,40 @@ extractDependencies
   -- ^ Content of a Cabal file.
   -> Map PackageName VersionRange
   -- ^ Needles found in the Cabal file and their version bounds.
-extractDependencies needles = relevantDeps needles . extractDeps
+extractDependencies needles = relevantDeps (`S.member` needles) . extractDeps
+
+-- | Scan Cabal file looking for all dependencies,
+-- coalescing version bounds from all components and under all conditions.
+--
+-- @since 0.3
+extractAllDependencies
+  :: ByteString
+  -- ^ Content of a Cabal file.
+  -> Map PackageName VersionRange
+  -- ^ All dependencies found in the Cabal file and their version bounds.
+extractAllDependencies = relevantDeps (const True) . extractDeps
 
 extractDeps :: ByteString -> [Dependency]
 extractDeps cnt = case parseGenericPackageDescriptionMaybe cnt of
   Nothing -> mempty
   Just descr -> foldMap targetBuildDepends $ toListOf Lens.traverseBuildInfos descr
 
-relevantDeps :: Set PackageName -> [Dependency] -> Map PackageName VersionRange
-relevantDeps needles =
+relevantDeps :: (PackageName -> Bool) -> [Dependency] -> Map PackageName VersionRange
+relevantDeps predicate =
   fmap simplifyVersionRange . M.fromListWith intersectVersionRanges . mapMaybe go
   where
     go (Dependency pkg ver _)
-      | pkg `elem` needles = Just (pkg, ver)
+      | predicate pkg = Just (pkg, ver)
       | otherwise = Nothing
 
--- | Combination of 'lastVersions' and 'extractDependencies'.
+-- | Combination of 'lastVersionsOfPackagesWithNeedles' and 'extractDependencies'.
 --
 -- @since 0.2
 getReverseDependencies
   :: Set PackageName
   -- ^ Needles to search in Cabal files.
   -> FilePath
-  -- ^ Path to @01-index.tar@.
-  -- One can use @Cabal.Config.cfgRepoIndex@ from @cabal-install-parsers@
-  -- to obtain it.
+  -- ^ Path to @01-index.tar@ or @01-index.tar.gz@.
   -> Maybe UTCTime
   -- ^ Timestamp of index state at which to stop scanning.
   -> IO (Map PackageName (Map PackageName VersionRange))
@@ -200,7 +226,12 @@ getReverseDependencies
   -- inner keys are needles,
   -- inner values are accepted version ranges.
 getReverseDependencies args fp indexState = do
-  releases <- lastVersions (S.map (B.pack . unPackageName) args) fp indexState
+  releases <-
+    lastVersionsOfPackagesWithNeedles
+      (const True)
+      (S.map (B.pack . unPackageName) args)
+      fp
+      indexState
   pure $ extractDependencies' args releases
 
 extractDependencies'
@@ -222,15 +253,13 @@ getTransitiveReverseDependencies
   :: Set PackageName
   -- ^ Needles to search in Cabal files.
   -> FilePath
-  -- ^ Path to @01-index.tar@.
-  -- One can use @Cabal.Config.cfgRepoIndex@ from @cabal-install-parsers@
-  -- to obtain it.
+  -- ^ Path to @01-index.tar@ or @01-index.tar.gz@.
   -> Maybe UTCTime
   -- ^ Timestamp of index state at which to stop scanning.
   -> IO (Map PackageName (Map PackageName VersionRange))
   -- ^ Reverse dependencies, including transitive ones.
 getTransitiveReverseDependencies args fp indexState = do
-  releases <- allLastVersions fp indexState
+  releases <- lastVersionsOfPackages (const True) fp indexState
   go mempty releases args
   where
     go

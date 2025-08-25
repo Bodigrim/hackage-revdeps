@@ -1,12 +1,12 @@
 cabal-version:   2.2
 name:            hackage-revdeps
-version:         0.2
+version:         0.3
 license:         BSD-3-Clause
 license-file:    LICENSE
 maintainer:      andrew.lelechenko@gmail.com
 author:          Bodigrim
 tested-with:
-    ghc ==9.12.2 ghc ==9.10.2 ghc ==9.8.4 ghc ==9.6.7 ghc ==9.4.8
+    ghc == 9.14.1 ghc ==9.12.2 ghc ==9.10.3 ghc ==9.8.4 ghc ==9.6.7 ghc ==9.4.8
 
 synopsis:        List Hackage reverse dependencies
 description:
@@ -38,16 +38,17 @@ library
         bytestring <0.13,
         containers >=0.5.8 && <0.9,
         filepath <1.6,
-        tar <0.7,
+        tar <0.8,
         text >=2.0 && <2.2,
         time <1.16,
+        zlib <0.8,
         Cabal-syntax >=3.8 && <3.17
 
 executable hackage-revdeps
     main-is:          Main.hs
     hs-source-dirs:   app
     default-language: GHC2021
-    ghc-options:      -Wall -Wunused-packages
+    ghc-options:      -Wall -Wunused-packages -rtsopts
     build-depends:
         base,
         ansi-terminal >=0.11.3 && <1.2,
@@ -64,7 +65,7 @@ executable hackage-revdeps-history
     main-is:          History.hs
     hs-source-dirs:   app
     default-language: GHC2021
-    ghc-options:      -Wall -Wunused-packages
+    ghc-options:      -Wall -Wunused-packages -rtsopts
     build-depends:
         base,
         ansi-terminal >=0.11.3 && <1.2,
