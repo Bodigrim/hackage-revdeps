@@ -1,3 +1,9 @@
+## 0.4
+
+* Yet another API overhaul, extending it with `ExtractDependenciesMode` argument.
+* Collect dependencies from `build-tool-depends` too.
+* `hackage-revdeps-history` now plots results.
+
 ## 0.3
 
 * Another API overhaul.

@@ -6,6 +6,7 @@ module Hackage.RevDeps (
   extractAllDependencies,
   getReverseDependencies,
   getTransitiveReverseDependencies,
+  ExtractDependenciesMode (..),
 ) where
 
 import Codec.Archive.Tar qualified as Tar
@@ -20,7 +21,7 @@ import Data.Foldable (fold)
 import Data.List (isSuffixOf)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as M
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, maybeToList)
 import Data.Set (Set)
 import Data.Set qualified as S
 import Data.Text (Text)
@@ -31,10 +32,16 @@ import Data.Text.Unsafe qualified as T
 import Data.Time (UTCTime)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Distribution.Compat.Lens (toListOf)
+import Distribution.Compat.NonEmptySet qualified as NES (singleton)
+import Distribution.PackageDescription (libBuildInfo, library)
+import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
-import Distribution.Types.BuildInfo (targetBuildDepends)
+import Distribution.Simple.BuildToolDepends (getAllToolDependencies)
+import Distribution.Types.BuildInfo (BuildInfo, buildable, targetBuildDepends)
 import Distribution.Types.BuildInfo.Lens qualified as Lens
 import Distribution.Types.Dependency (Dependency (..))
+import Distribution.Types.ExeDependency (ExeDependency (..))
+import Distribution.Types.LibraryName (LibraryName (..))
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Distribution.Types.VersionRange (VersionRange)
 import Distribution.Version (Version, intersectVersionRanges, mkVersion, simplifyVersionRange)
@@ -76,7 +83,7 @@ filterByNeedles needles = M.filter (containsAnyAsWholeWord machine . decodeUtf8L
   where
     machine = Aho.build (map ((\x -> (x, x)) . decodeUtf8Lenient) (S.toList needles))
 
--- | Scan Cabal index @01-index.tar@ and return Cabal files
+-- | Scan Cabal index @01-index.tar@ (or @01-index.tar.gz@) and return Cabal files
 -- of last versions (not necessarily latest releases or revisions).
 --
 -- @since 0.3
@@ -179,29 +186,57 @@ tarTakeWhile p =
 --
 -- @since 0.1
 extractDependencies
-  :: Set PackageName
+  :: ExtractDependenciesMode
+  -- ^ Which package components to scan?
+  -> Set PackageName
   -- ^ Needles to search.
   -> ByteString
   -- ^ Content of a Cabal file.
   -> Map PackageName VersionRange
   -- ^ Needles found in the Cabal file and their version bounds.
-extractDependencies needles = relevantDeps (`S.member` needles) . extractDeps
+extractDependencies mode needles = relevantDeps (`S.member` needles) . extractDeps mode
 
 -- | Scan Cabal file looking for all dependencies,
 -- coalescing version bounds from all components and under all conditions.
 --
 -- @since 0.3
 extractAllDependencies
-  :: ByteString
+  :: ExtractDependenciesMode
+  -- ^ Which package components to scan?
+  -> ByteString
   -- ^ Content of a Cabal file.
   -> Map PackageName VersionRange
   -- ^ All dependencies found in the Cabal file and their version bounds.
-extractAllDependencies = relevantDeps (const True) . extractDeps
+extractAllDependencies mode = relevantDeps (const True) . extractDeps mode
 
-extractDeps :: ByteString -> [Dependency]
-extractDeps cnt = case parseGenericPackageDescriptionMaybe cnt of
+-- | Which package components to look inside for dependencies?
+--
+-- @since 0.4
+data ExtractDependenciesMode
+  = -- | All buildable components, including tests, benchmarks, sublibraries.
+    AllComponents
+  | -- | Only the main library if any.
+    OnlyMainLib
+
+extractDeps :: ExtractDependenciesMode -> ByteString -> [Dependency]
+extractDeps mode cnt = case parseGenericPackageDescriptionMaybe cnt of
   Nothing -> mempty
-  Just descr -> foldMap targetBuildDepends $ toListOf Lens.traverseBuildInfos descr
+  Just descr -> foldMap (extractDepsFromBuildInfo getToolDeps) buildInfos
+    where
+      flatDescr = flattenPackageDescription descr
+      getToolDeps = getAllToolDependencies flatDescr
+      buildInfos = case mode of
+        AllComponents -> toListOf Lens.traverseBuildInfos flatDescr
+        OnlyMainLib -> maybeToList (fmap libBuildInfo (library flatDescr))
+
+extractDepsFromBuildInfo :: (BuildInfo -> [ExeDependency]) -> BuildInfo -> [Dependency]
+extractDepsFromBuildInfo getToolDeps bi
+  | buildable bi =
+      targetBuildDepends bi
+        <> map
+          (\(ExeDependency pkg _ ver) -> Dependency pkg ver (NES.singleton LMainLibName))
+          (getToolDeps bi)
+  | otherwise = []
 
 relevantDeps :: (PackageName -> Bool) -> [Dependency] -> Map PackageName VersionRange
 relevantDeps predicate =
@@ -215,7 +250,9 @@ relevantDeps predicate =
 --
 -- @since 0.2
 getReverseDependencies
-  :: Set PackageName
+  :: ExtractDependenciesMode
+  -- ^ Which package components to scan?
+  -> Set PackageName
   -- ^ Needles to search in Cabal files.
   -> FilePath
   -- ^ Path to @01-index.tar@ or @01-index.tar.gz@.
@@ -225,32 +262,34 @@ getReverseDependencies
   -- ^ Outer keys are reverse dependencies,
   -- inner keys are needles,
   -- inner values are accepted version ranges.
-getReverseDependencies args fp indexState = do
+getReverseDependencies mode args fp indexState = do
   releases <-
     lastVersionsOfPackagesWithNeedles
       (const True)
       (S.map (B.pack . unPackageName) args)
       fp
       indexState
-  pure $ extractDependencies' args releases
+  pure $ extractDependencies' args $ fmap (extractDeps mode) releases
 
 extractDependencies'
   :: Set PackageName
-  -> Map PackageName ByteString
+  -> Map PackageName [Dependency]
   -> Map PackageName (Map PackageName VersionRange)
 extractDependencies' args releases =
   M.filter (not . null) $
     -- Most of packages trivially depend on themselves
     -- (e. g., test suite depends on a library); skip it.
     M.mapWithKey M.delete $
-      fmap (extractDependencies args) releases
+      fmap (relevantDeps (`S.member` args)) releases
 
 -- | Same as 'getReverseDependencies', but
 -- returns not only direct, but also indirect reverse dependencies.
 --
 -- @since 0.2
 getTransitiveReverseDependencies
-  :: Set PackageName
+  :: ExtractDependenciesMode
+  -- ^ Which package components to scan?
+  -> Set PackageName
   -- ^ Needles to search in Cabal files.
   -> FilePath
   -- ^ Path to @01-index.tar@ or @01-index.tar.gz@.
@@ -258,13 +297,13 @@ getTransitiveReverseDependencies
   -- ^ Timestamp of index state at which to stop scanning.
   -> IO (Map PackageName (Map PackageName VersionRange))
   -- ^ Reverse dependencies, including transitive ones.
-getTransitiveReverseDependencies args fp indexState = do
+getTransitiveReverseDependencies mode args fp indexState = do
   releases <- lastVersionsOfPackages (const True) fp indexState
-  go mempty releases args
+  go mempty (fmap (extractDeps mode) releases) args
   where
     go
       :: Map PackageName (Map PackageName VersionRange)
-      -> Map PackageName ByteString
+      -> Map PackageName [Dependency]
       -> Set PackageName
       -> IO (Map PackageName (Map PackageName VersionRange))
     go acc releases xs = do

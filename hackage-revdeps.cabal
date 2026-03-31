@@ -1,12 +1,13 @@
 cabal-version:   2.2
 name:            hackage-revdeps
-version:         0.3
+version:         0.4
 license:         BSD-3-Clause
 license-file:    LICENSE
 maintainer:      andrew.lelechenko@gmail.com
 author:          Bodigrim
 tested-with:
-    ghc == 9.14.1 ghc ==9.12.2 ghc ==9.10.3 ghc ==9.8.4 ghc ==9.6.7 ghc ==9.4.8
+    ghc ==9.14.1 ghc ==9.12.2 ghc ==9.10.3 ghc ==9.8.4 ghc ==9.6.7
+    ghc ==9.4.8
 
 synopsis:        List Hackage reverse dependencies
 description:
@@ -36,13 +37,14 @@ library
         alfred-margaret >=2.0 && <2.2,
         base >=4.17 && <5,
         bytestring <0.13,
+        Cabal >=3.8 && <3.17,
+        Cabal-syntax >=3.8 && <3.17,
         containers >=0.5.8 && <0.9,
         filepath <1.6,
         tar <0.8,
         text >=2.0 && <2.2,
-        time <1.16,
-        zlib <0.8,
-        Cabal-syntax >=3.8 && <3.17
+        time <1.17,
+        zlib <0.8
 
 executable hackage-revdeps
     main-is:          Main.hs
@@ -50,16 +52,16 @@ executable hackage-revdeps
     default-language: GHC2021
     ghc-options:      -Wall -Wunused-packages -rtsopts
     build-depends:
-        base,
         ansi-terminal >=0.11.3 && <1.2,
+        base,
+        Cabal >=3.8 && <3.17,
         cabal-install >=3.8 && <3.17,
+        Cabal-syntax >=3.8 && <3.17,
         containers,
         filepath,
         hackage-revdeps,
         optparse-applicative >=0.16 && <0.20,
-        time <1.16,
-        Cabal-syntax >=3.8 && <3.17,
-        Cabal >=3.8 && <3.17
+        time <1.17
 
 executable hackage-revdeps-history
     main-is:          History.hs
@@ -67,13 +69,16 @@ executable hackage-revdeps-history
     default-language: GHC2021
     ghc-options:      -Wall -Wunused-packages -rtsopts
     build-depends:
-        base,
         ansi-terminal >=0.11.3 && <1.2,
+        base,
+        Cabal >=3.8 && <3.17,
         cabal-install >=3.8 && <3.17,
+        Cabal-syntax >=3.8 && <3.17,
         containers,
         filepath,
+        granite >=0.7 && <0.8,
         hackage-revdeps,
         optparse-applicative >=0.16 && <0.20,
-        time <1.16,
-        Cabal-syntax >=3.8 && <3.17,
-        Cabal >=3.8 && <3.17
+        terminal-size >=0.2 && <0.4,
+        text <2.2,
+        time <1.17
