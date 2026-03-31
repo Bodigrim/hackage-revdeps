@@ -15,6 +15,7 @@ import Data.Time (Day, UTCTime (..))
 import Distribution.Client.Config (loadConfig, savedGlobalFlags)
 import Distribution.Client.GlobalFlags (globalCacheDir)
 import Distribution.Compat.NonEmptySet (singleton)
+import Distribution.Parsec (simpleParsec)
 import Distribution.Pretty (pretty)
 import Distribution.Simple.Flag (fromFlag)
 import Distribution.Types.Dependency (Dependency (..))
@@ -22,7 +23,7 @@ import Distribution.Types.LibraryName (LibraryName (..))
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Distribution.Types.VersionRange (VersionRange)
 import Hackage.RevDeps (getReverseDependencies, getTransitiveReverseDependencies)
-import Options.Applicative (Parser, ReadM, auto, execParser, fullDesc, help, helper, info, long, metavar, option, optional, progDesc, strArgument, switch)
+import Options.Applicative (Parser, ReadM, argument, auto, execParser, fullDesc, help, helper, info, long, maybeReader, metavar, option, optional, progDesc, switch)
 import Options.Applicative.NonEmpty (some1)
 import System.Console.ANSI (hSupportsANSI, hyperlinkCode)
 import System.FilePath ((</>))
@@ -43,7 +44,7 @@ parseArgs = do
           <> help "Timestamp of index state at which to stop scanning, YYYY-MM-DD"
   cnfPackageNames <-
     some1 $
-      strArgument $
+      argument (maybeReader simpleParsec) $
         metavar "PKGS"
           <> help "Package names to scan Hackage for their reverse dependencies"
   cnfTransitive <-
