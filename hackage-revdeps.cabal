@@ -42,7 +42,8 @@ library
         text >=2.0 && <2.2,
         time <1.17,
         zlib <0.8,
-        Cabal-syntax >=3.8 && <3.17
+        Cabal-syntax >=3.8 && <3.17,
+        Cabal >=3.8 && <3.17
 
 executable hackage-revdeps
     main-is:          Main.hs

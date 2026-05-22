@@ -31,10 +31,15 @@ import Data.Text.Unsafe qualified as T
 import Data.Time (UTCTime)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Distribution.Compat.Lens (toListOf)
+import Distribution.Compat.NonEmptySet qualified as NES (singleton)
+import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
+import Distribution.Simple.BuildToolDepends (getAllToolDependencies)
 import Distribution.Types.BuildInfo (targetBuildDepends)
 import Distribution.Types.BuildInfo.Lens qualified as Lens
 import Distribution.Types.Dependency (Dependency (..))
+import Distribution.Types.ExeDependency (ExeDependency (..))
+import Distribution.Types.LibraryName (LibraryName (..))
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Distribution.Types.VersionRange (VersionRange)
 import Distribution.Version (Version, intersectVersionRanges, mkVersion, simplifyVersionRange)
@@ -201,7 +206,15 @@ extractAllDependencies = relevantDeps (const True) . extractDeps
 extractDeps :: ByteString -> [Dependency]
 extractDeps cnt = case parseGenericPackageDescriptionMaybe cnt of
   Nothing -> mempty
-  Just descr -> foldMap targetBuildDepends $ toListOf Lens.traverseBuildInfos descr
+  Just descr ->
+    foldMap
+      ( \bi ->
+          targetBuildDepends bi
+            <> map
+              (\(ExeDependency pkg _ ver) -> Dependency pkg ver (NES.singleton LMainLibName))
+              (getAllToolDependencies (flattenPackageDescription descr) bi)
+      )
+      (toListOf Lens.traverseBuildInfos descr)
 
 relevantDeps :: (PackageName -> Bool) -> [Dependency] -> Map PackageName VersionRange
 relevantDeps predicate =
