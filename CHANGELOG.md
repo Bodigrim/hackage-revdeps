@@ -1,3 +1,8 @@
+## 0.4.1
+
+* Do not filter dependencies based on `buildable` field in Cabal file, it's unreliable.
+* Support `cabal-install-3.18`.
+
 ## 0.4
 
 * Yet another API overhaul, extending it with `ExtractDependenciesMode` argument.

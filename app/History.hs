@@ -1,4 +1,5 @@
 {-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main (
@@ -21,6 +22,7 @@ import Distribution.Client.GlobalFlags (globalCacheDir)
 import Distribution.Parsec (simpleParsec)
 import Distribution.Simple.Flag (fromFlag)
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
+import Distribution.Verbosity qualified as Verbosity
 import Granite (defPlot, lineGraph, widthChars, xFormatter, yBounds, yFormatter)
 import Hackage.RevDeps (ExtractDependenciesMode (..), getReverseDependencies, getTransitiveReverseDependencies)
 import Options.Applicative (Parser, argument, auto, execParser, fullDesc, help, helper, info, long, maybeReader, metavar, option, progDesc, showDefault, switch, value)
@@ -59,15 +61,22 @@ parseArgs today = do
         <> value 1000
         <> showDefault
   cnfPackageNames <-
-    some1 $
-      argument (maybeReader simpleParsec) $
-        metavar "PKGS"
-          <> help "Package names to scan Hackage for their reverse dependencies"
+    some1
+      $ argument (maybeReader simpleParsec)
+      $ metavar "PKGS"
+        <> help "Package names to scan Hackage for their reverse dependencies"
   cnfTransitive <-
     switch $
       long "transitive"
         <> help "Count transitive (both direct and indirect) dependencies. This mode is imprecise when passing multiple package names at once. Also in this mode we follow only dependencies of the main library"
   pure Config {..}
+
+silentVerbosity :: Verbosity.Verbosity
+#if MIN_VERSION_Cabal(3,18,0)
+silentVerbosity = Verbosity.mkVerbosity Verbosity.defaultVerbosityHandles Verbosity.silent
+#else
+silentVerbosity = Verbosity.silent
+#endif
 
 main :: IO ()
 main = do
@@ -80,7 +89,7 @@ main = do
       dates = L.nub $ [cnfStart, addDays (fromIntegral cnfStep) cnfStart .. cnfFinish] ++ [cnfFinish]
   supportsAnsi <- hSupportsANSI stdout
 
-  cnf <- loadConfig minBound mempty
+  cnf <- loadConfig silentVerbosity mempty
   let cacheDir = fromFlag $ globalCacheDir $ savedGlobalFlags cnf
       idx = cacheDir </> hackageHaskellOrg </> "01-index.tar"
   putStrLn $ unwords $ "Date      " : map (showPackage supportsAnsi) args

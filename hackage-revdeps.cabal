@@ -1,6 +1,6 @@
 cabal-version:   2.2
 name:            hackage-revdeps
-version:         0.4
+version:         0.4.1
 license:         BSD-3-Clause
 license-file:    LICENSE
 maintainer:      andrew.lelechenko@gmail.com
@@ -37,8 +37,8 @@ library
         alfred-margaret >=2.0 && <2.2,
         base >=4.17 && <5,
         bytestring <0.13,
-        Cabal >=3.8 && <3.17,
-        Cabal-syntax >=3.8 && <3.17,
+        Cabal >=3.8 && <3.19,
+        Cabal-syntax >=3.8 && <3.19,
         containers >=0.5.8 && <0.9,
         filepath <1.6,
         tar <0.8,
@@ -54,9 +54,9 @@ executable hackage-revdeps
     build-depends:
         ansi-terminal >=0.11.3 && <1.2,
         base,
-        Cabal >=3.8 && <3.17,
-        cabal-install >=3.8 && <3.17,
-        Cabal-syntax >=3.8 && <3.17,
+        Cabal,
+        cabal-install >=3.8 && <3.19,
+        Cabal-syntax,
         containers,
         filepath,
         hackage-revdeps,
@@ -71,9 +71,9 @@ executable hackage-revdeps-history
     build-depends:
         ansi-terminal >=0.11.3 && <1.2,
         base,
-        Cabal >=3.8 && <3.17,
-        cabal-install >=3.8 && <3.17,
-        Cabal-syntax >=3.8 && <3.17,
+        Cabal,
+        cabal-install >=3.8 && <3.19,
+        Cabal-syntax,
         containers,
         filepath,
         granite >=0.7 && <0.8,

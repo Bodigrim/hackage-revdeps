@@ -37,7 +37,7 @@ import Distribution.PackageDescription (libBuildInfo, library)
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescriptionMaybe)
 import Distribution.Simple.BuildToolDepends (getAllToolDependencies)
-import Distribution.Types.BuildInfo (BuildInfo, buildable, targetBuildDepends)
+import Distribution.Types.BuildInfo (BuildInfo, targetBuildDepends)
 import Distribution.Types.BuildInfo.Lens qualified as Lens
 import Distribution.Types.Dependency (Dependency (..))
 import Distribution.Types.ExeDependency (ExeDependency (..))
@@ -213,7 +213,7 @@ extractAllDependencies mode = relevantDeps (const True) . extractDeps mode
 --
 -- @since 0.4
 data ExtractDependenciesMode
-  = -- | All buildable components, including tests, benchmarks, sublibraries.
+  = -- | All components, including tests, benchmarks, sublibraries.
     AllComponents
   | -- | Only the main library if any.
     OnlyMainLib
@@ -230,13 +230,11 @@ extractDeps mode cnt = case parseGenericPackageDescriptionMaybe cnt of
         OnlyMainLib -> maybeToList (fmap libBuildInfo (library flatDescr))
 
 extractDepsFromBuildInfo :: (BuildInfo -> [ExeDependency]) -> BuildInfo -> [Dependency]
-extractDepsFromBuildInfo getToolDeps bi
-  | buildable bi =
-      targetBuildDepends bi
-        <> map
-          (\(ExeDependency pkg _ ver) -> Dependency pkg ver (NES.singleton LMainLibName))
-          (getToolDeps bi)
-  | otherwise = []
+extractDepsFromBuildInfo getToolDeps bi =
+  targetBuildDepends bi
+    <> map
+      (\(ExeDependency pkg _ ver) -> Dependency pkg ver (NES.singleton LMainLibName))
+      (getToolDeps bi)
 
 relevantDeps :: (PackageName -> Bool) -> [Dependency] -> Map PackageName VersionRange
 relevantDeps predicate =
@@ -276,11 +274,12 @@ extractDependencies'
   -> Map PackageName [Dependency]
   -> Map PackageName (Map PackageName VersionRange)
 extractDependencies' args releases =
-  M.filter (not . null) $
+  M.filter (not . null)
+    $
     -- Most of packages trivially depend on themselves
     -- (e. g., test suite depends on a library); skip it.
-    M.mapWithKey M.delete $
-      fmap (relevantDeps (`S.member` args)) releases
+    M.mapWithKey M.delete
+    $ fmap (relevantDeps (`S.member` args)) releases
 
 -- | Same as 'getReverseDependencies', but
 -- returns not only direct, but also indirect reverse dependencies.

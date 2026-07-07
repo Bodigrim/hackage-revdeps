@@ -1,4 +1,5 @@
 {-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main (
@@ -22,6 +23,7 @@ import Distribution.Types.Dependency (Dependency (..))
 import Distribution.Types.LibraryName (LibraryName (..))
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Distribution.Types.VersionRange (VersionRange)
+import Distribution.Verbosity qualified as Verbosity
 import Hackage.RevDeps (ExtractDependenciesMode (..), getReverseDependencies, getTransitiveReverseDependencies)
 import Options.Applicative (Parser, ReadM, argument, auto, execParser, fullDesc, help, helper, info, long, maybeReader, metavar, option, optional, progDesc, switch)
 import Options.Applicative.NonEmpty (some1)
@@ -38,20 +40,27 @@ data Config = Config
 parseArgs :: Parser Config
 parseArgs = do
   cnfIndexState <-
-    optional $
-      option (fmap (`UTCTime` 0) (auto :: ReadM Day)) $
-        long "index-state"
-          <> help "Timestamp of index state at which to stop scanning, YYYY-MM-DD"
+    optional
+      $ option (fmap (`UTCTime` 0) (auto :: ReadM Day))
+      $ long "index-state"
+        <> help "Timestamp of index state at which to stop scanning, YYYY-MM-DD"
   cnfPackageNames <-
-    some1 $
-      argument (maybeReader simpleParsec) $
-        metavar "PKGS"
-          <> help "Package names to scan Hackage for their reverse dependencies"
+    some1
+      $ argument (maybeReader simpleParsec)
+      $ metavar "PKGS"
+        <> help "Package names to scan Hackage for their reverse dependencies"
   cnfTransitive <-
     switch $
       long "transitive"
         <> help "Count transitive (both direct and indirect) dependencies. This mode is imprecise when passing multiple package names at once. Also in this mode we follow only dependencies of the main library"
   pure Config {..}
+
+silentVerbosity :: Verbosity.Verbosity
+#if MIN_VERSION_Cabal(3,18,0)
+silentVerbosity = Verbosity.mkVerbosity Verbosity.defaultVerbosityHandles Verbosity.silent
+#else
+silentVerbosity = Verbosity.silent
+#endif
 
 main :: IO ()
 main = do
@@ -61,7 +70,7 @@ main = do
       info (helper <*> parseArgs) (fullDesc <> progDesc desc)
   let args = S.fromList $ NE.toList cnfPackageNames
 
-  cnf <- loadConfig minBound mempty
+  cnf <- loadConfig silentVerbosity mempty
   let cacheDir = fromFlag $ globalCacheDir $ savedGlobalFlags cnf
       idx = cacheDir </> hackageHaskellOrg </> "01-index.tar"
       func = if cnfTransitive then getTransitiveReverseDependencies OnlyMainLib else getReverseDependencies AllComponents
@@ -79,9 +88,9 @@ report args pkgs
       reportTable supportsAnsi pkgs'
       putStrLn "Total count:"
       let counters =
-            flip M.restrictKeys args $
-              M.unionsWith (+) $
-                fmap (fmap (const (1 :: Int))) pkgs
+            flip M.restrictKeys args
+              $ M.unionsWith (+)
+              $ fmap (fmap (const (1 :: Int))) pkgs
       reportTable supportsAnsi counters
 
 reportTable :: Show v => Bool -> Map PackageName v -> IO ()
