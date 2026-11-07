@@ -44,7 +44,7 @@ import Distribution.Types.ExeDependency (ExeDependency (..))
 import Distribution.Types.LibraryName (LibraryName (..))
 import Distribution.Types.PackageName (PackageName, mkPackageName, unPackageName)
 import Distribution.Types.VersionRange (VersionRange)
-import Distribution.Version (Version, intersectVersionRanges, mkVersion, simplifyVersionRange)
+import Distribution.Version (Version, mkVersion, simplifyVersionRange, unionVersionRanges)
 import System.FilePath (isPathSeparator)
 
 -- | Scan Cabal index and return Cabal files
@@ -238,7 +238,7 @@ extractDepsFromBuildInfo getToolDeps bi =
 
 relevantDeps :: (PackageName -> Bool) -> [Dependency] -> Map PackageName VersionRange
 relevantDeps predicate =
-  fmap simplifyVersionRange . M.fromListWith intersectVersionRanges . mapMaybe go
+  fmap simplifyVersionRange . M.fromListWith unionVersionRanges . mapMaybe go
   where
     go (Dependency pkg ver _)
       | predicate pkg = Just (pkg, ver)
@@ -313,6 +313,6 @@ getTransitiveReverseDependencies mode args fp indexState = do
         then pure acc
         else
           go
-            (M.unionWith (M.unionWith intersectVersionRanges) acc revDeps)
+            (M.unionWith (M.unionWith unionVersionRanges) acc revDeps)
             (M.withoutKeys releases revDepsKeys)
             revDepsKeys
